@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::Sender;
@@ -30,21 +29,24 @@ impl Audio {
         }
     }
 
-    fn capture_audio2(&self, host : &cpal::Host) {
+    fn capture_audio2(& mut self, host : &cpal::Host) {
         let device = host
             .default_input_device()
             .expect("no default input device");
         
         println!("Input device: {:?}", device.name());
-    
         let mut inp_supported_configs_range = device.supported_input_configs().expect("error while querying configs");
         let config = inp_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
         
-        let clip = AudioClip {
-            samples: Vec::new(),
+        // let clip = AudioClip {
+        //     samples: Vec::new(),
+        // };
+        let clipx = AudioClip {
+            samples : self.clip.samples.clone(),
         };
-        let clip = Arc::new(Mutex::new(Some(clip)));
+        let clip = Arc::new(Mutex::new(Some(clipx)));
         let clip_2 = clip.clone();
+        let clip_3 = clip.clone();
 
         println!("Begin recording...");
         let err_fn = move |err| {
@@ -88,13 +90,22 @@ impl Audio {
             ),
         };
         
-        while self.clip.samples.len() < 100 {
+        loop {
+
+            if let Ok(mut guard) = clip_3.try_lock() {
+                if let Some(clip_3) = guard.as_mut() {
+                    if clip_3.samples.len() > 10000 {
+                        break;
+                    }
+                }
+            }
 
         }
 
         drop(stream);
-        let clip = clip.lock().unwrap().take().unwrap();
+        let clip = clip_3.lock().unwrap().take().unwrap();
         eprintln!("Recorded {} samples", clip.samples.len());
+        self.clip.samples = clip.samples;
     }
 
 
@@ -155,6 +166,8 @@ fn main() {
     let mut audio = Audio::new();
     
     audio.capture_audio2(&host);
+
+    println!("sample len() after scope ends: {}", audio.clip.samples.len());
 
     // audio.play_audio(&host);
 
