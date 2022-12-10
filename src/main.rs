@@ -111,49 +111,72 @@ impl Audio {
 
 
 
-    // fn play_audio(&self, host : &cpal::Host){
-    //     let device = host
-    //         .default_output_device()
-    //         .expect("no output device");
-    //     println!("Output device: {}", device.name());
-    //     let config = device.default_output_config();
+    fn play_audio(& mut self, host : &cpal::Host){
+        let device = host
+            .default_output_device()
+            .expect("no output device");
+        
+        let mut out_supported_configs_range = device.supported_output_configs().expect("error while querying configs");
+        let config = out_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
 
-    //     println!("Begin playback...");
+        println!("Begin playback...");
 
-    //     type StateHandle = Arc<Mutex<Option<(usize, Vec<f32>, Sender<()>)>>>;
-    //     let sample_rate = config.sample_rate().0;
-    //     // let (done_tx, done_rx) = channel::<()>();
-    //     // let state = (0, self.resample(sample_rate).samples, done_tx);
-    //     // let state = Arc::new(Mutex::new(Some(state)));
-    //     let channels = config.channels();
+        let state = (0, self.clip.samples.clone());
 
-    //     let err_fn = move |err| {
-    //         eprintln!("an error occurred on stream: {}", err);
-    //     };
+        type StateHandle = Arc<Mutex<Option<(usize, Vec<f32>)>>>;
 
-    //     fn write_output_data<T>(output: &mut [T], channels: u16, writer: &StateHandle)
-    //     where
-    //         T: cpal::Sample,
-    //     {
-    //         if let Ok(mut guard) = writer.try_lock() {
-    //             if let Some((i, clip.samples, done)) = guard.as_mut() {
-    //                 for frame in output.chunks_mut(channels.into()) {
-    //                     for sample in frame.iter_mut() {
-    //                         *sample = cpal::Sample::from(clip.samples.get(*i).unwrap_or(&0f32));
-    //                     }
-    //                     *i += 1;
-    //                 }
-    //                 if *i >= clip.samples.len() {
-    //                     if let Err(_) = done.send(()) {
-    //                         // Playback has already stopped. We'll be dead soon.
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     }
+        let state = Arc::new(Mutex::new(Some(state)));
 
+        // let clipx = AudioClip {
+        //     samples : self.clip.samples.clone(),
+        // };
+
+        let channels = config.channels();
+
+        fn write_output_data<T>(output: &mut [T], channels: u16, writer: &StateHandle)
+        where
+            T: cpal::Sample,
+        {
+            if let Ok(mut guard) = writer.try_lock() {
+                if let Some((i, clip)) = guard.as_mut() {
+                    for frame in output.chunks_mut(channels.into()) {
+                        for sample in frame.iter_mut() {
+                            *sample = cpal::Sample::from(clip.get(*i).unwrap_or(&0f32));
+                        }
+                        *i += 1;
+                    }
+                    if *i >= clip.len() {
+                        // if let Err(_) = done.send(()) {
+                        //     // Playback has already stopped. We'll be dead soon.
+                        // }
+                    }
+                }
+            }
+        }
+
+        let stream = match config.sample_format() {
+            cpal::SampleFormat::F32 => device.build_output_stream(
+                &config.into(),
+                move |data, _: &_| write_output_data::<f32>(data, channels, &state),
+                err_fn,
+            ),
+            cpal::SampleFormat::I16 => device.build_output_stream(
+                &config.into(),
+                move |data, _: &_| write_output_data::<i16>(data, channels, &state),
+                err_fn,
+            ),
+            cpal::SampleFormat::U16 => device.build_output_stream(
+                &config.into(),
+                move |data, _: &_| write_output_data::<u16>(data, channels, &state),
+                err_fn,
+            ),
+        };
+
+        loop {
+
+        }
     }
+}
 
 
 
@@ -169,7 +192,7 @@ fn main() {
 
     println!("sample len() after scope ends: {}", audio.clip.samples.len());
 
-    // audio.play_audio(&host);
+    audio.play_audio(&host);
 
 
 }
