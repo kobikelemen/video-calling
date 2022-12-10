@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::Sender;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use std::sync::mpsc;
 
 fn err_fn(e : cpal::StreamError)
 {
@@ -38,13 +39,13 @@ impl Audio {
         let mut inp_supported_configs_range = device.supported_input_configs().expect("error while querying configs");
         let config = inp_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
         
-        // let clip = AudioClip {
-        //     samples: Vec::new(),
-        // };
+        let (tx, rx) = mpsc::channel();
+
+
         let clipx = AudioClip {
             samples : self.clip.samples.clone(),
         };
-        let clip = Arc::new(Mutex::new(Some(clipx)));
+        let clip = Arc::new(Mutex::new(Some((clipx, tx))));
         let clip_2 = clip.clone();
         let clip_3 = clip.clone();
 
@@ -55,18 +56,21 @@ impl Audio {
 
         let channels = config.channels();
 
-        type ClipHandle = Arc<Mutex<Option<AudioClip>>>;
+        type ClipHandle = Arc<Mutex<Option<(AudioClip, Sender<()>)>>>;
+
 
         fn write_input_data<T>(input: &[T], channels: u16, writer: &ClipHandle)
         where
             T: cpal::Sample,
         {
             if let Ok(mut guard) = writer.try_lock() {
-                if let Some(clip) = guard.as_mut() {
+                if let Some((clip, tx)) = guard.as_mut() {
                     for frame in input.chunks(channels.into()) {
                         let x = frame[0].to_f32();
-                        println!("{x}");
                         clip.samples.push(frame[0].to_f32());
+                        if clip.samples.len() > 100000 {
+                            tx.send(());
+                        }
                     }
                 }
             }
@@ -89,21 +93,21 @@ impl Audio {
                 err_fn,
             ),
         };
-        
-        loop {
 
-            if let Ok(mut guard) = clip_3.try_lock() {
-                if let Some(clip_3) = guard.as_mut() {
-                    if clip_3.samples.len() > 10000 {
-                        break;
-                    }
-                }
-            }
+        let recv = rx.recv().unwrap();
 
-        }
+        // loop {
+        //     if let Ok(mut guard) = clip_3.try_lock() {
+        //         if let Some(clip_3) = guard.as_mut() {
+        //             if clip_3.samples.len() > 100000 {
+        //                 break;
+        //             }
+        //         }
+        //     }
+        // }
 
         drop(stream);
-        let clip = clip_3.lock().unwrap().take().unwrap();
+        let (clip, tx) = clip_3.lock().unwrap().take().unwrap();
         eprintln!("Recorded {} samples", clip.samples.len());
         self.clip.samples = clip.samples;
     }
@@ -121,15 +125,13 @@ impl Audio {
 
         println!("Begin playback...");
 
-        let state = (0, self.clip.samples.clone());
+        let (tx, rx) = mpsc::channel();
 
-        type StateHandle = Arc<Mutex<Option<(usize, Vec<f32>)>>>;
+        let state = (0, self.clip.samples.clone(), tx);
+
+        type StateHandle = Arc<Mutex<Option<(usize, Vec<f32>, Sender<()>)>>>;
 
         let state = Arc::new(Mutex::new(Some(state)));
-
-        // let clipx = AudioClip {
-        //     samples : self.clip.samples.clone(),
-        // };
 
         let channels = config.channels();
 
@@ -138,7 +140,7 @@ impl Audio {
             T: cpal::Sample,
         {
             if let Ok(mut guard) = writer.try_lock() {
-                if let Some((i, clip)) = guard.as_mut() {
+                if let Some((i, clip, donex)) = guard.as_mut() {
                     for frame in output.chunks_mut(channels.into()) {
                         for sample in frame.iter_mut() {
                             *sample = cpal::Sample::from(clip.get(*i).unwrap_or(&0f32));
@@ -146,9 +148,7 @@ impl Audio {
                         *i += 1;
                     }
                     if *i >= clip.len() {
-                        // if let Err(_) = done.send(()) {
-                        //     // Playback has already stopped. We'll be dead soon.
-                        // }
+                        donex.send(());
                     }
                 }
             }
@@ -172,9 +172,8 @@ impl Audio {
             ),
         };
 
-        loop {
-
-        }
+        let rec = rx.recv().unwrap();
+        println!("Finished playback");
     }
 }
 
