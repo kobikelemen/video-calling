@@ -1,8 +1,14 @@
+mod networking
+
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::Sender;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::mpsc;
+use video-calling::networking
+
+
+
 
 fn err_fn(e : cpal::StreamError)
 {
@@ -34,30 +40,19 @@ impl Audio {
         let device = host
             .default_input_device()
             .expect("no default input device");
-        
         println!("Input device: {:?}", device.name());
         let mut inp_supported_configs_range = device.supported_input_configs().expect("error while querying configs");
         let config = inp_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
-        
         let (tx, rx) = mpsc::channel();
-
-
         let clipx = AudioClip {
             samples : self.clip.samples.clone(),
         };
         let clip = Arc::new(Mutex::new(Some((clipx, tx))));
         let clip_2 = clip.clone();
         let clip_3 = clip.clone();
-
         println!("Begin recording...");
-        let err_fn = move |err| {
-            eprintln!("an error occurred on stream: {}", err);
-        };
-
         let channels = config.channels();
-
         type ClipHandle = Arc<Mutex<Option<(AudioClip, Sender<()>)>>>;
-
 
         fn write_input_data<T>(input: &[T], channels: u16, writer: &ClipHandle)
         where
@@ -95,17 +90,6 @@ impl Audio {
         };
 
         let recv = rx.recv().unwrap();
-
-        // loop {
-        //     if let Ok(mut guard) = clip_3.try_lock() {
-        //         if let Some(clip_3) = guard.as_mut() {
-        //             if clip_3.samples.len() > 100000 {
-        //                 break;
-        //             }
-        //         }
-        //     }
-        // }
-
         drop(stream);
         let (clip, tx) = clip_3.lock().unwrap().take().unwrap();
         eprintln!("Recorded {} samples", clip.samples.len());
@@ -119,20 +103,13 @@ impl Audio {
         let device = host
             .default_output_device()
             .expect("no output device");
-        
         let mut out_supported_configs_range = device.supported_output_configs().expect("error while querying configs");
         let config = out_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
-
         println!("Begin playback...");
-
         let (tx, rx) = mpsc::channel();
-
         let state = (0, self.clip.samples.clone(), tx);
-
         type StateHandle = Arc<Mutex<Option<(usize, Vec<f32>, Sender<()>)>>>;
-
         let state = Arc::new(Mutex::new(Some(state)));
-
         let channels = config.channels();
 
         fn write_output_data<T>(output: &mut [T], channels: u16, writer: &StateHandle)
@@ -182,16 +159,13 @@ impl Audio {
 
 
 fn main() {
-    use cpal::traits::{DeviceTrait, HostTrait};
-    let host = cpal::default_host();
+    // use cpal::traits::{DeviceTrait, HostTrait};
+    // let host = cpal::default_host();
+    // let mut audio = Audio::new();
+    // audio.capture_audio2(&host);
+    // println!("sample len() after scope ends: {}", audio.clip.samples.len());
+    // audio.play_audio(&host);
 
-    let mut audio = Audio::new();
-    
-    audio.capture_audio2(&host);
-
-    println!("sample len() after scope ends: {}", audio.clip.samples.len());
-
-    audio.play_audio(&host);
-
-
+    let server_connection = ServerConnection::new();
+    let call_connection = CallConnection::new("jeff", &server_connection)
 }
