@@ -1,11 +1,10 @@
-mod networking
+mod client;
 
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::Sender;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::mpsc;
-use video-calling::networking
 
 
 
@@ -166,6 +165,18 @@ fn main() {
     // println!("sample len() after scope ends: {}", audio.clip.samples.len());
     // audio.play_audio(&host);
 
-    let server_connection = ServerConnection::new();
-    let call_connection = CallConnection::new("jeff", &server_connection)
+    let server_connection = client::ServerConnection::new();
+    let friend_name : String= "jeff".to_string();
+    let call_connection = client::CallConnection::new(friend_name, server_connection);
+
+    let mut x : Vec<f32> = Vec::new();
+    x.push(69.0);
+    x.push(69.0);
+    x.push(69.0);
+    x.push(69.0);
+    loop {
+        call_connection.send_data(&x);
+        // call_connection.recv_data();
+    }
+
 }

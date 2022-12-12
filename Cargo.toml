@@ -1,5 +1,5 @@
 [package]
-name = "video-calling"
+name = "videocalling"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 cpal = "0.14.2"
 chrono = "0.4.19"
+byteorder = "1.4.3"
