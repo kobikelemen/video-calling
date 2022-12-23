@@ -4,7 +4,6 @@ mod audio;
 use std::sync::mpsc;
 
 
-
 fn main() {
     use cpal::traits::{DeviceTrait, HostTrait};
     let host = cpal::default_host();
@@ -19,8 +18,6 @@ fn main() {
     loop {
         match call_connection.recv_data() {
             Some(audiopacket) => {
-                // send the packets samples to the sound playing thread using a pipe, 
-                //      the thread then adds it into a queue which it plays samples from
                 speaker_packet_tx.send(audiopacket);
             },
             None => {
@@ -30,9 +27,6 @@ fn main() {
         if let Ok(audio_packet) = mic_packet_rx.try_recv() {
             call_connection.send_data(audio_packet)
         }
-        // get sound samples from mic and put into packet
-        // send packet over network
-
     }
 
 }
