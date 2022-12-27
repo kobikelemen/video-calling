@@ -1,22 +1,31 @@
 extern crate queues;
 
+
+use crate::byte_trates::{ConvertBytes, from_bytes};
 use queues::*;
 use std::mem;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::{Sender, Receiver};
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::sync::mpsc;
+use cpal::traits::{DeviceTrait};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 
-type StateHandle = Arc<Mutex<Option<(usize, Receiver<AudioPacket>, Queue<f32>)>>>;
-type ClipHandle = Arc<Mutex<Option<(u32, Sender<AudioPacket>, Vec<u8>)>>>;
+// U is other person type, T is my type, S is arbitrary type
 
 
-fn write_output_data<T>(output: &mut [T], channels: u16, writer: &StateHandle)
+// type ClipHandle = Arc<Mutex<Option<(u32, Sender<AudioPacket>, Vec<u8>)>>>;
+
+
+
+
+
+
+
+fn write_output_data<T,U>(output: &mut [T], channels: u16, writer: &Arc<Mutex<Option<(usize, Receiver<AudioPacket<U>>, Queue<U>)>>>)
 where
     T: cpal::Sample,
+    U: Clone + cpal::Sample,
 {
     if let Ok(mut guard) = writer.try_lock() {
         if let Some((i, audiopacket_rx, que)) = guard.as_mut() {
@@ -31,6 +40,7 @@ where
                         break;
                     }
                     if let Ok(v) = que.remove() {
+                        // convert 'v' of type U to type T before adding it to *sample
                         *sample = cpal::Sample::from(&v);
                     } else {
                         println!("Failed to remove element from queue");
@@ -45,25 +55,38 @@ where
 }
 
 
-fn write_input_data<T>(input: &[T], channels: u16, writer: &ClipHandle)
+fn write_input_data<T>(input: &[T], channels: u16, writer: &Arc<Mutex<Option<(u32, Sender<AudioPacket<T>>, Vec<u8>)>>>)
 where
-    T: cpal::Sample,
+    T: cpal::Sample + ConvertBytes,
 {
     if let Ok(mut guard) = writer.try_lock() {
         if let Some((seq_num, tx, buf)) = guard.as_mut() {
             for frame in input.chunks(channels.into()) {
-                let x : f32 = frame[0].to_f32();
-                for b in f32::to_ne_bytes(x) {
-                    buf.push(b);
+                let x : T = frame[0].try_into().expect("FAILED");
+                for b in x.to_ne_bytes().iter() {
+                    buf.push(*b);
                 }
+                //     let x = frame[0].to_f32();
+                //     for b in T::to_ne_bytes(x) {
+                //         buf.push(b);
+                //     }
+                // } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                //     let x = frame[0].to_i16();
+                //     for b in T::to_ne_bytes(x) {
+                //         buf.push(b);
+                //     }
+                // } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                //     let x = frame[0].to_u16();
+                //     for b in T::to_ne_bytes(x) {
+                //         buf.push(b);
+                //     }
+                // }
+                
                 if buf.len() == 160 {
-                    // buf.insert(0, seq_num);
-                    // buf.insert(0, chrono::DateTime::timestamp());
                     let mut res : Vec<u8> = Vec::from(seq_num.to_ne_bytes());
-                    // let datetime = chrono::DateTime;
                     res.extend_from_slice(&SystemTime::now().duration_since(UNIX_EPOCH).expect("System time failed").as_millis().to_ne_bytes());
                     res.extend_from_slice(&buf);
-                    let audiopacket : AudioPacket = AudioPacket::new_from_bytes(res);
+                    let audiopacket : AudioPacket<T> = AudioPacket::new_from_bytes(res);
                     tx.send(audiopacket);
                     buf.clear();
                     *seq_num += 1;
@@ -81,21 +104,23 @@ fn err_fn(e : cpal::StreamError)
     println!("error bish");
 }
 
-pub struct AudioPacket
+pub struct AudioPacket<S>
 {
+    // pub data_type : u8,
     pub maxbytes : usize,
     pub timestamp : u128, // use chrono::DateTime::timestamp()
     pub sequencenumber : u32,
-    pub samples : Vec<f32>,
+    pub samples : Vec<S>,
     pub bytes : Vec<u8>, // incl headers
 }
 
-impl AudioPacket 
+impl<S: ConvertBytes> AudioPacket<S>
 {
-    pub fn new(time : u128, seqnumber : u32, samps : Vec<f32>) -> Self {
+    pub fn new(time : u128, seqnumber : u32, samps : Vec<S>) -> Self {
         let maxbyte : usize = 160;
         const timesize : usize = 16;
         const seqsize : usize = 4;
+
         let timestamp_bytes : [u8; timesize] = time.to_ne_bytes();
         let sequencenumber_bytes : [u8; seqsize] = seqnumber.to_ne_bytes();
         let mut bs : Vec<u8> = Vec::new();
@@ -107,14 +132,14 @@ impl AudioPacket
             bs.push(sequencenumber_bytes[x]);
         }
         // fill data bytes
-        let lim;
-        if samps.len() > (maxbyte * 4).try_into().unwrap() {
-            lim = maxbyte;
-        } else {
-            lim = samps.len();
-        }
+        let lim = maxbyte / mem::size_of::<S>();
+        // if samps.len() > (maxbyte / mem::sizeof(T)).try_into().unwrap() {
+        //     lim = maxbyte / mem::sizeof(T);
+        // } else {
+        //     lim = samps.len();
+        // }
         for x in 0..lim {
-            let t : [u8; 4] = samps[x].to_ne_bytes();
+            let t : Vec<u8> = Vec::from(samps[x].to_ne_bytes());
             for y in t {
                 bs.push(y);
             }
@@ -136,14 +161,21 @@ impl AudioPacket
     pub fn new_from_bytes(byte : Vec<u8>) -> Self {
         const timesize : usize = 16;
         const seqsize : usize = 4;
-        let timest : u128 = u128::from_ne_bytes(byte[0..timesize].try_into().expect("Failed converting to i64 in new_from_bytes()"));
+        let timest : u128 = u128::from_ne_bytes(byte[0..timesize].try_into().expect("Failed converting to time format in new_from_bytes()"));
         let seqnum : u32 = u32::from_ne_bytes(byte[timesize..(timesize+seqsize)].try_into().expect("Failed converting to u32 in new_from_bytes()"));
-        let mut samps : Vec<f32> = Vec::new();
+        let mut samps : Vec<S> = Vec::new();
         let mut i = timesize + seqsize;
         while i < byte.len() {
-            let s : f32 = f32::from_ne_bytes(byte[(i-4)..i].try_into().expect("Failed converting to f32 in new_from_bytes()"));
+            // match std::any::TypeId<S>() {
+            //     std::any::TypeId::of::<f32>() => {
+            //         let s : f32 = f32::from_ne_bytes(byte[(i-mem::size_of::<f32>())..i]);
+
+            //     },
+            // }
+            // let s : S = from_bytes::<S>(byte[(i-mem::size_of::<S>())..i].to_vec());
+            let s : S = S::from_ne_bytes(byte[(i-mem::size_of::<S>())..i].try_into().expect("Failed converting to sample format in new_from_bytes()"));
             samps.push(s);
-            i += 4;
+            i += mem::size_of::<S>();
         }
         Self {
             maxbytes : 160,
@@ -173,39 +205,42 @@ pub struct Audio {
     pub clip : AudioClip,
 }
 
+
 impl Audio {
 
-    pub fn new(host : &cpal::Host, rx : Receiver<AudioPacket>, tx : Sender<AudioPacket>) -> Self {
-        let q : Queue<f32> = Queue::new(); // COULD BE OTHER TYPE IN QUEUE ON OTHER PLATFORMS, DEPENDS ON SAMPLES 
-        let out_device = host
-            .default_output_device()
-            .expect("no output device");
+    pub fn new<T,U>(out_device : cpal::Device , inp_device : cpal::Device, host : &cpal::Host, rx : Receiver<AudioPacket<U>>, tx : Sender<AudioPacket<T>>) -> Self 
+    where 
+        T: cpal::Sample + ConvertBytes + Send,
+        U: Clone + cpal::Sample + Send,
+    {
+        // get sample type, U, that will be received from other user over the network
+        // type StateHandle = Arc<Mutex<Option<(usize, Receiver<AudioPacket>, Queue<U>)>>>;
+        let q : Queue<U> = Queue::new();
         let mut out_supported_configs_range = out_device.supported_output_configs().expect("error while querying configs");
         let out_config = out_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
-        let out_state = (0, rx, q);
+        let num : usize = 0;
+        let out_state = (num, rx, q);
         let out_state = Arc::new(Mutex::new(Some(out_state)));
         let out_channels = out_config.channels();
         let out_s = match out_config.sample_format() {
             cpal::SampleFormat::F32 => out_device.build_output_stream(
                 &out_config.into(),
-                move |inp_data, _: &_| write_output_data::<f32>(inp_data, out_channels, &out_state),
+                move |inp_data, _: &_| write_output_data::<f32,U>(inp_data, out_channels, &out_state),
                 err_fn,
             ),
             cpal::SampleFormat::I16 => out_device.build_output_stream(
                 &out_config.into(),
-                move |inp_data, _: &_| write_output_data::<i16>(inp_data, out_channels, &out_state),
+                move |inp_data, _: &_| write_output_data::<i16,U>(inp_data, out_channels, &out_state),
                 err_fn,
             ),
             cpal::SampleFormat::U16 => out_device.build_output_stream(
                 &out_config.into(),
-                move |inp_data, _: &_| write_output_data::<u16>(inp_data, out_channels, &out_state),
+                move |inp_data, _: &_| write_output_data::<u16,U>(inp_data, out_channels, &out_state),
                 err_fn,
             ),
         };
 
-        let inp_device = host
-            .default_input_device()
-            .expect("no default input device");
+        // let inp_device = host.default_input_device().expect("no default input device");
         println!("Input device: {:?}", inp_device.name());
         let mut inp_supported_configs_range = inp_device.supported_input_configs().expect("error while querying configs");
         let inp_config = inp_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
@@ -215,17 +250,17 @@ impl Audio {
         let inp_s = match inp_config.sample_format() {
             cpal::SampleFormat::F32 => inp_device.build_input_stream(
                 &inp_config.into(),
-                move |inp_data, _: &_| write_input_data::<f32>(inp_data, inp_channels, &inp_state),
+                move |inp_data, _: &_| write_input_data::<T>(inp_data, inp_channels, &inp_state),
                 err_fn,
             ),
             cpal::SampleFormat::I16 => inp_device.build_input_stream(
                 &inp_config.into(),
-                move |inp_data, _: &_| write_input_data::<i16>(inp_data, inp_channels, &inp_state),
+                move |inp_data, _: &_| write_input_data::<T>(inp_data, inp_channels, &inp_state),
                 err_fn,
             ),
             cpal::SampleFormat::U16 => inp_device.build_input_stream(
                 &inp_config.into(),
-                move |inp_data, _: &_| write_input_data::<u16>(inp_data, inp_channels, &inp_state),
+                move |inp_data, _: &_| write_input_data::<T>(inp_data, inp_channels, &inp_state),
                 err_fn,
             ),
         };
@@ -242,72 +277,9 @@ impl Audio {
 
     
 
-    pub fn capture_audio2(& mut self, host : &cpal::Host, tx : Sender<AudioPacket>) {
-        // let device = host
-        //     .default_input_device()
-        //     .expect("no default input device");
-        // println!("Input device: {:?}", device.name());
-        // let mut inp_supported_configs_range = device.supported_input_configs().expect("error while querying configs");
-        // let config = inp_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
-        // // let (tx, rx) = mpsc::channel();
-        // let buffer : Vec<u8> = Vec::new();
-        // // let clipx = AudioClip {
-        // //     samples : self.clip.samples.clone(),
-        // // };
-        // let state = Arc::new(Mutex::new(Some((0, tx, buffer))));
-        // // let clip_2 = clip.clone();
-        // // let clip_3 = clip.clone();
-        // println!("Begin recording...");
-        // let channels = config.channels();
-
-        // fn write_input_data<T>(input: &[T], channels: u16, writer: &ClipHandle)
-        // where
-        //     T: cpal::Sample,
-        // {
-        //     if let Ok(mut guard) = writer.try_lock() {
-        //         if let Some((tx, buf)) = guard.as_mut() {
-        //             for frame in input.chunks(channels.into()) {
-        //                 let x : f32 = frame[0].to_f32();
-        //                 for b in f32::to_ne_bytes(x) {
-        //                     buf.push(b);
-        //                 }
-        //                 if buf.len() == 160 {
-        //                     let audiopacket : AudioPacket = AudioPacket::new_from_bytes(buf);
-        //                     tx.send(audiopacket);
-        //                     buf.clear();
-        //                 }
-        //                 // buf.samples.push(frame[0].to_f32());
-        //                 // if clip.samples.len() > 100000 {
-        //                 //     tx.send(());
-        //                 // }
-        //             }
-        //         }
-        //     }
-        // }
-
-        // let inp_s = match config.sample_format() {
-        //     cpal::SampleFormat::F32 => device.build_input_stream(
-        //         &config.into(),
-        //         move |data, _: &_| write_input_data::<f32>(data, channels, &state),
-        //         err_fn,
-        //     ),
-        //     cpal::SampleFormat::I16 => device.build_input_stream(
-        //         &config.into(),
-        //         move |data, _: &_| write_input_data::<i16>(data, channels, &state),
-        //         err_fn,
-        //     ),
-        //     cpal::SampleFormat::U16 => device.build_input_stream(
-        //         &config.into(),
-        //         move |data, _: &_| write_input_data::<u16>(data, channels, &state),
-        //         err_fn,
-        //     ),
-        // };
-        // let recv = rx.recv().unwrap();
-        // drop(stream);
-        // let (clip, tx) = clip_3.lock().unwrap().take().unwrap();
-        // eprintln!("Recorded {} samples", clip.samples.len());
-        // self.clip.samples = clip.samples;
-    }
+    // pub fn capture_audio2(& mut self, host : &cpal::Host, tx : Sender<AudioPacket>) {
+        
+    // }
 
 
     pub fn play_audio(& mut self, host : &cpal::Host, rx : Receiver<()>){

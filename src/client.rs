@@ -1,9 +1,9 @@
-// mod audio;
 
-use crate::audio::AudioPacket;
-use std::net::{UdpSocket, TcpStream, IpAddr, Ipv4Addr, Ipv6Addr};
-use byteorder::ByteOrder;
-use byteorder::LittleEndian;
+
+use crate::audio::{AudioPacket};
+use crate::byte_trates::{ConvertBytes};
+use std::net::{UdpSocket, IpAddr, Ipv4Addr};
+// use byteorder::LittleEndian;
 
 pub struct ServerConnection {
     // server_ip : IpAddr,
@@ -37,7 +37,7 @@ impl ServerConnection {
 
     pub fn get_friend_addr(&self, friend_id : String) -> (IpAddr, u16) {
         // call http req to get ip addr & port num
-        (IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 1069)
+        (IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 1068)
     }
 }
 
@@ -68,7 +68,8 @@ impl CallConnection {
         
     }
 
-    pub fn send_data(&self, packet : AudioPacket) {
+    pub fn send_data<T: ConvertBytes>(&self, packet : AudioPacket<T>) 
+    {
         
         // println!("Packet sent: ");
         // for x in packet.samples {
@@ -76,8 +77,8 @@ impl CallConnection {
         // }
         
         let mut buf : Vec<u8> = Vec::new();
-        for i in 0..data.len() {
-            let byte_arr : [u8; 4] = packet.samples[i].to_ne_bytes();
+        for i in 0..packet.samples.len() {
+            let byte_arr : [u8; 4] = packet.samples[i].to_ne_bytes().try_into().expect("FAILED");
             for byte in byte_arr {
                 buf.push(byte);
             }
@@ -86,13 +87,15 @@ impl CallConnection {
         
     }
 
-    pub fn recv_data(&self) -> Option<AudioPacket> {
-
+    pub fn recv_data<U: ConvertBytes>(&self) -> Option<AudioPacket<U>> {
         
         let mut buf = [0; 300];
         let res = self.my_udp_socket.recv_from(&mut buf);//.expect("Didn't recieve data");
+        const packetsize : usize = 180;
+        
         match res {
-            Ok((num_bytes, src_addr)) => return Some(AudioPacket::new_from_bytes(Vec::from(buf[0..num_bytes]))),
+            // Ok((num_bytes, src_addr)) => return Some(U.from_ne_bytes::<U>(&buf[0..packetsize])),
+            Ok((num_bytes, src_addr)) => return Some(AudioPacket::<U>::new_from_bytes(buf[0..packetsize].to_vec())),
             Err(e) => return None,
         }
         
