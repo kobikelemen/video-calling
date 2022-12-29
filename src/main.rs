@@ -34,6 +34,8 @@ where
     }
 }
 
+// mac is f32, linux is i16
+
 
 fn main() 
 {    
