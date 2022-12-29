@@ -37,7 +37,7 @@ impl ServerConnection {
 
     pub fn get_friend_addr(&self, friend_id : String) -> (IpAddr, u16) {
         // call http req to get ip addr & port num
-        (IpAddr::V4(Ipv4Addr::new()), 1068)
+        (IpAddr::V4(Ipv4Addr::new()), 1068);//
     }
 }
 
