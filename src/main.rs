@@ -19,9 +19,12 @@ where
     let friend_name : String = "jeff".to_string();
     let port = 1069; // recv from port
     let call_connection = client::CallConnection::new(friend_name, server_connection, port);
+    println!("set up socket");
     loop {
+        // println!("looping");
         match call_connection.recv_data::<OtherSampleType>() {
             Some(audiopacket) => {
+                // println!("recieved packet");
                 speaker_packet_tx.send(audiopacket);
             },
             None => {
@@ -29,6 +32,7 @@ where
             },
         }
         if let Ok(audio_packet_bytes) = mic_packet_rx.try_recv() {
+            // println!("sent packet");
             call_connection.send_data::<MySampleType>(audio_packet_bytes);
         }
     }

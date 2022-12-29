@@ -37,7 +37,7 @@ impl ServerConnection {
 
     pub fn get_friend_addr(&self, friend_id : String) -> (IpAddr, u16) {
         // call http req to get ip addr & port num
-        (IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 1068)
+        (IpAddr::V4(Ipv4Addr::new()), 1068)
     }
 }
 
@@ -54,16 +54,18 @@ pub struct CallConnection {
 
 impl CallConnection {
     pub fn new(friend_id : String, server_conn : ServerConnection, port : u16) -> Self {
-        
         let (oip, oport) = server_conn.get_friend_addr(friend_id);
         let udpport = port;
+        let socket = UdpSocket::bind(("127.0.0.1", udpport)).expect("Couldn't bind to address!");
+        socket.set_nonblocking(true).expect("Couldn't set to non blocking");
+        socket.connect((oip, oport)).expect("Connection failed");
         CallConnection {
             server_connection : server_conn,
             // need to do error checking here to ensure other person is online ->
             other_ip : oip,
             other_port : oport,
             my_udp_port : udpport,
-            my_udp_socket : UdpSocket::bind(("127.0.0.1", udpport)).expect("Couldn't bind to address!"),
+            my_udp_socket : socket,
         }
         
     }
@@ -83,14 +85,19 @@ impl CallConnection {
         //         buf.push(byte);
         //     }
         // }
-        self.my_udp_socket.send_to(&packet_bytes, (self.other_ip, self.other_port)).expect("Couldn't send data!");
+
+
+        self.my_udp_socket.send(&packet_bytes);
+        // self.my_udp_socket.send_to(&packet_bytes, (self.other_ip, self.other_port)).expect("Couldn't send data!");
         
     }
 
     pub fn recv_data<U: ConvertBytes>(&self) -> Option<Vec<u8>> {
         const packetsize : usize = 180;
         let mut buf = [0; packetsize];
+        println!("before self.my_upd_socket.recv_from()");
         let res = self.my_udp_socket.recv_from(&mut buf);//.expect("Didn't recieve data");
+        println!("after self.my_upd_socket.recv_from()");
         let data : Vec<u8> = Vec::from(buf);
         match res {
             // Ok((num_bytes, src_addr)) => return Some(U.from_ne_bytes::<U>(&buf[0..packetsize])),

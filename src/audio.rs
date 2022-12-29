@@ -117,7 +117,6 @@ where
                             println!("PLAYING SAMPLE");
                             *sample = cpal::Sample::from(&v);
                         }
-                        // convert 'v' of type U to type T before adding it to *sample
                     } else if que_i.size() > 0 {
                         if let Ok(v) = que_i.remove() {
                             println!("PLAYING SAMPLE");
@@ -167,6 +166,7 @@ where
             }
         }
     }
+    // println!("end of write_input_data()");
 }
 
 
