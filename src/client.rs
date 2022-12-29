@@ -68,7 +68,7 @@ impl CallConnection {
         
     }
 
-    pub fn send_data<T: ConvertBytes>(&self, packet : AudioPacket<T>) 
+    pub fn send_data<T: ConvertBytes>(&self, packet_bytes : Vec<u8>) 
     {
         
         // println!("Packet sent: ");
@@ -76,26 +76,25 @@ impl CallConnection {
         //     println!("{}", x);
         // }
         
-        let mut buf : Vec<u8> = Vec::new();
-        for i in 0..packet.samples.len() {
-            let byte_arr : [u8; 4] = packet.samples[i].to_ne_bytes().try_into().expect("FAILED");
-            for byte in byte_arr {
-                buf.push(byte);
-            }
-        }
-        self.my_udp_socket.send_to(&buf, (self.other_ip, self.other_port)).expect("Couldn't send data!");
+        // let mut buf : Vec<u8> = Vec::new();
+        // for i in 0..packet.samples.len() {
+        //     let byte_arr : [u8; 4] = packet.samples[i].to_ne_bytes().try_into().expect("FAILED");
+        //     for byte in byte_arr {
+        //         buf.push(byte);
+        //     }
+        // }
+        self.my_udp_socket.send_to(&packet_bytes, (self.other_ip, self.other_port)).expect("Couldn't send data!");
         
     }
 
-    pub fn recv_data<U: ConvertBytes>(&self) -> Option<AudioPacket<U>> {
-        
-        let mut buf = [0; 300];
-        let res = self.my_udp_socket.recv_from(&mut buf);//.expect("Didn't recieve data");
+    pub fn recv_data<U: ConvertBytes>(&self) -> Option<Vec<u8>> {
         const packetsize : usize = 180;
-        
+        let mut buf = [0; packetsize];
+        let res = self.my_udp_socket.recv_from(&mut buf);//.expect("Didn't recieve data");
+        let data : Vec<u8> = Vec::from(buf);
         match res {
             // Ok((num_bytes, src_addr)) => return Some(U.from_ne_bytes::<U>(&buf[0..packetsize])),
-            Ok((num_bytes, src_addr)) => return Some(AudioPacket::<U>::new_from_bytes(buf[0..packetsize].to_vec())),
+            Ok((num_bytes, src_addr)) => return Some(data),
             Err(e) => return None,
         }
         
