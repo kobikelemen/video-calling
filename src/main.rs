@@ -1,10 +1,10 @@
 mod client;
 mod audio;
-mod byte_trates;
+mod byte_traits;
 
 use std::sync::mpsc;
 use cpal::traits::{HostTrait, DeviceTrait};
-use byte_trates::ConvertBytes;
+use byte_traits::ConvertBytes;
 use std::fmt::Display;
 
 fn run_app<MySampleType, OtherSampleType>(out_device : cpal::Device, inp_device : cpal::Device) 
@@ -21,10 +21,9 @@ where
     let call_connection = client::CallConnection::new(friend_name, server_connection, port);
     println!("set up socket");
     loop {
-        // println!("looping");
         match call_connection.recv_data::<OtherSampleType>() {
             Some(audiopacket) => {
-                // println!("recieved packet");
+                println!("data received: {:?}", audiopacket);
                 speaker_packet_tx.send(audiopacket);
             },
             None => {
@@ -32,7 +31,6 @@ where
             },
         }
         if let Ok(audio_packet_bytes) = mic_packet_rx.try_recv() {
-            // println!("sent packet");
             call_connection.send_data::<MySampleType>(audio_packet_bytes);
         }
     }

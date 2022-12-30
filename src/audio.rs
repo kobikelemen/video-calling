@@ -1,7 +1,7 @@
 extern crate queues;
 
 
-use crate::byte_trates::{ConvertBytes};
+use crate::byte_traits::{ConvertBytes};
 use queues::*;
 use std::mem;
 use std::sync::Arc;
@@ -33,35 +33,37 @@ where
 
 
 fn convert_sample_type<T,U>(bytes : &Vec<u8>) {
-// where 
-//     T: std::convert::From<f32>,
-// {
-//     if TypeId::of::<U>() == TypeId::of::<f32>() {
-//         let b : [u8; 4] = [0; 4];
-//         for i in 0..bytes.len() {
-//             b[i] = bytes[i];
-//         }
-//         let x : f32 = f32::from_ne_bytes(b);
-//         let y : T = x.try_into().expect("FAIL");
-//         return y;
-//     }
-    // } else if TypeId::of::<U>() == TypeId::of::<i16>() {
-    //     let b : [u8; 2] = [0; 2];
-    //     for i in 0..bytes.len() {
-    //         b[i] = bytes[i];
-    //     }
-    //     let x : i16 = i16::from_ne_bytes(b);
-    //     let y : T = x.try_into().expect("FAIL");
-    //     return y;
-    // } else if TypeId::of::<U>() == TypeId::of::<u16>() {
-    //     let b : [u8; 2] = [0; 2];
-    //     for i in 0..bytes.len() {
-    //         b[i] = bytes[i];
-    //     }
-    //     let x : u16 = u16::from_ne_bytes(b);
-    //     let y : T = x.try_into().expect("FAIL");
-    //     return y;
-    // }
+/*
+    where 
+    T: std::convert::From<f32>,
+{
+    if TypeId::of::<U>() == TypeId::of::<f32>() {
+        let b : [u8; 4] = [0; 4];
+        for i in 0..bytes.len() {
+            b[i] = bytes[i];
+        }
+        let x : f32 = f32::from_ne_bytes(b);
+        let y : T = x.try_into().expect("FAIL");
+        return y;
+    }
+    } else if TypeId::of::<U>() == TypeId::of::<i16>() {
+        let b : [u8; 2] = [0; 2];
+        for i in 0..bytes.len() {
+            b[i] = bytes[i];
+        }
+        let x : i16 = i16::from_ne_bytes(b);
+        let y : T = x.try_into().expect("FAIL");
+        return y;
+    } else if TypeId::of::<U>() == TypeId::of::<u16>() {
+        let b : [u8; 2] = [0; 2];
+        for i in 0..bytes.len() {
+            b[i] = bytes[i];
+        }
+        let x : u16 = u16::from_ne_bytes(b);
+        let y : T = x.try_into().expect("FAIL");
+        return y;
+    }
+*/
 }
 
 
@@ -99,7 +101,6 @@ where
     T: cpal::Sample,
     U: Clone + cpal::Sample + 'static,
 {
-    // println!("GOT TO 4");
     if let Ok(mut guard) = writer.try_lock() {
         if let Some((i, audiopacket_rx, que_f, que_i, que_u)) = guard.as_mut() {
             if let Ok(audio_packet_bytes) = audiopacket_rx.try_recv() {
@@ -144,12 +145,10 @@ fn write_input_data<T>(input: &[T], channels: u16, writer: &Arc<Mutex<Option<(u3
 where
     T: cpal::Sample + ConvertBytes + Display,
 {
-    // println!("GOT TO 5");
     if let Ok(mut guard) = writer.try_lock() {
         if let Some((seq_num, tx, buf)) = guard.as_mut() {
             for frame in input.chunks(channels.into()) {
                 let x : T = frame[0].try_into().expect("FAILED");
-                // println!("{}", x);
                 let bytes : Vec<u8> = x.to_ne_bytes();
                 for b in bytes {
                     buf.push(b);
@@ -343,17 +342,5 @@ impl Audio {
                 samples : Vec::new(),
             },
         }
-    }
-
-
-    
-
-    // pub fn capture_audio2(& mut self, host : &cpal::Host, tx : Sender<AudioPacket>) {
-        
-    // }
-
-
-    pub fn play_audio(& mut self, host : &cpal::Host, rx : Receiver<()>){
-    
     }
 }

@@ -1,4 +1,4 @@
-
+use std::net::{UdpSocket, IpAddr, Ipv4Addr, TcpListener, TcpStream};
 
 fn u32_to_binary(mut i : u32) -> [u8; 32] {
     let mut res : [u8; 32] = [0; 32];
@@ -18,7 +18,7 @@ fn u32_to_binary(mut i : u32) -> [u8; 32] {
 
 
 
-fn main()
+fn float_to_binary()
 {
     let f = 12.5f32;    
     let x = f.to_ne_bytes();
@@ -55,4 +55,20 @@ fn main()
     }
     // println!("EQUAL!");
     
+}
+
+
+fn handle_client(stream: TcpStream) {
+    println!("Connected!");
+}
+
+
+fn main() 
+{
+    let listener = TcpListener::bind("192.168.0.91:1071");
+
+    // accept connections and process them serially
+    for stream in listener.expect("FAIL1").incoming() {
+        handle_client(stream.expect("Failed connection"));
+    }
 }

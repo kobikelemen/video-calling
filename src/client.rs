@@ -1,9 +1,8 @@
 
 
 use crate::audio::{AudioPacket};
-use crate::byte_trates::{ConvertBytes};
+use crate::byte_traits::{ConvertBytes};
 use std::net::{UdpSocket, IpAddr, Ipv4Addr};
-// use byteorder::LittleEndian;
 
 pub struct ServerConnection {
     // server_ip : IpAddr,
@@ -13,17 +12,19 @@ pub struct ServerConnection {
 impl ServerConnection {
     pub fn new() -> Self {
         
-        // let server_connect_port = 20001;
-        // server_ip_ = IPAddr::new(127, 0, 0, 1);
-        // if let Ok(server_str) = TcpStream::connect((server_ip_, server_connect_port)); {
-        //     println!("Connected to server...");
-        // } else {
-        //     println!("Connection to server FAILED");
-        // }
-        // ServerConnection {
-        //     server_ip : server_ip_,
-        //     server_strean : server_str,
-        // }
+        /*
+        let server_connect_port = 20001;
+        server_ip_ = IPAddr::new(127, 0, 0, 1);
+        if let Ok(server_str) = TcpStream::connect((server_ip_, server_connect_port)); {
+            println!("Connected to server...");
+        } else {
+            println!("Connection to server FAILED");
+        }
+        ServerConnection {
+            server_ip : server_ip_,
+            server_strean : server_str,
+        }
+        */
 
 
         ServerConnection {
@@ -37,7 +38,7 @@ impl ServerConnection {
 
     pub fn get_friend_addr(&self, friend_id : String) -> (IpAddr, u16) {
         // call http req to get ip addr & port num
-        (IpAddr::V4(Ipv4Addr::new()), 1068);//
+        (IpAddr::V4(Ipv4Addr::new()), 1068)
     }
 }
 
@@ -56,7 +57,7 @@ impl CallConnection {
     pub fn new(friend_id : String, server_conn : ServerConnection, port : u16) -> Self {
         let (oip, oport) = server_conn.get_friend_addr(friend_id);
         let udpport = port;
-        let socket = UdpSocket::bind(("127.0.0.1", udpport)).expect("Couldn't bind to address!");
+        let socket = UdpSocket::bind(("", udpport)).expect("Couldn't bind to address!");
         socket.set_nonblocking(true).expect("Couldn't set to non blocking");
         socket.connect((oip, oport)).expect("Connection failed");
         CallConnection {
@@ -96,16 +97,19 @@ impl CallConnection {
         const packetsize : usize = 180;
         let mut buf = [0; packetsize];
         println!("before self.my_upd_socket.recv_from()");
-        let res = self.my_udp_socket.recv_from(&mut buf);//.expect("Didn't recieve data");
+        let res = self.my_udp_socket.recv(&mut buf);//.expect("Didn't recieve data");
         println!("after self.my_upd_socket.recv_from()");
         let data : Vec<u8> = Vec::from(buf);
         match res {
             // Ok((num_bytes, src_addr)) => return Some(U.from_ne_bytes::<U>(&buf[0..packetsize])),
-            Ok((num_bytes, src_addr)) => return Some(data),
-            Err(e) => return None,
+            Ok(num_bytes) => {
+                println!("Recieved data!");
+                return Some(data)
+            },
+            Err(e) => {
+                println!("Didn't receive");
+                return None
+            },
         }
-        
-
-        // return Some(AudioPacket::new(69, 69, Vec::from([0.3;160])));
     }
 }
