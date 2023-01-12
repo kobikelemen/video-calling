@@ -11,6 +11,7 @@ use cpal::traits::{DeviceTrait};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::any::TypeId;
 use std::fmt::Display;
+use cpal::Sample;
 
 // U is other person type, T is my type, S is arbitrary type
 
@@ -32,105 +33,106 @@ where
 }
 
 
-fn convert_sample_type<T,U>(bytes : &Vec<u8>) {
-/*
-    where 
-    T: std::convert::From<f32>,
-{
-    if TypeId::of::<U>() == TypeId::of::<f32>() {
-        let b : [u8; 4] = [0; 4];
-        for i in 0..bytes.len() {
-            b[i] = bytes[i];
-        }
-        let x : f32 = f32::from_ne_bytes(b);
-        let y : T = x.try_into().expect("FAIL");
-        return y;
-    }
-    } else if TypeId::of::<U>() == TypeId::of::<i16>() {
-        let b : [u8; 2] = [0; 2];
-        for i in 0..bytes.len() {
-            b[i] = bytes[i];
-        }
-        let x : i16 = i16::from_ne_bytes(b);
-        let y : T = x.try_into().expect("FAIL");
-        return y;
-    } else if TypeId::of::<U>() == TypeId::of::<u16>() {
-        let b : [u8; 2] = [0; 2];
-        for i in 0..bytes.len() {
-            b[i] = bytes[i];
-        }
-        let x : u16 = u16::from_ne_bytes(b);
-        let y : T = x.try_into().expect("FAIL");
-        return y;
-    }
-*/
-}
-
-
-
-fn add_samples_to_queue<U>(packet_bytes : &Vec<u8>, q_f : &mut Queue<f32>, q_i : &mut Queue<i16>, q_u : &mut Queue<u16>)
+fn add_samples_to_queue<U>(packet_bytes : &Vec<u8>, q_f : &mut Queue<f32>, q_i : &mut Queue<i16>, q_u : &mut Queue<u16>, upscale_factor : u32)
 where
     U: 'static,
 {
-    // convert samples from other type to my type then add to queue
     const timesize : usize = 16;
     const seqsize : usize = 4;
-    let timest : u128 = u128::from_ne_bytes(packet_bytes[0..timesize].try_into().expect("Failed converting to time format in new_from_bytes()"));
-    let seqnum : u32 = u32::from_ne_bytes(packet_bytes[timesize..(timesize+seqsize)].try_into().expect("Failed converting to u32 in new_from_bytes()"));
+    let timest : u128 = u128::from_ne_bytes(packet_bytes[seqsize..seqsize+timesize].try_into().expect("Failed converting to time format in new_from_bytes()"));
+    let seqnum : u32 = u32::from_ne_bytes(packet_bytes[0..seqsize].try_into().expect("Failed converting to u32 in new_from_bytes()"));
+    // println!("timestamp: {}", timest);
+    // println!("seqnum: {}", seqnum);
     let mut i = (timesize + seqsize) as u32;
     let other_samp_size : usize = type_size::<U>();
     while i < packet_bytes.len().try_into().expect("F") {
         if TypeId::of::<U>() == TypeId::of::<f32>() {
             let x : f32 = f32::from_ne_bytes(packet_bytes[((i as usize)-other_samp_size)..(i as usize)].try_into().expect("FAILED"));
-            q_f.add(x);
+            for n in 0..upscale_factor {
+                q_f.add(x);
+            }
+            // println!("{x}");
         } else if TypeId::of::<U>() == TypeId::of::<i16>() {
+            println!("i16 added");
             let x : i16 = i16::from_ne_bytes(packet_bytes[((i as usize)-other_samp_size)..(i as usize)].try_into().expect("FAILED"));
-            q_i.add(x);
+            for n in 0..upscale_factor {
+                q_i.add(x);
+            }
         } else if TypeId::of::<U>() == TypeId::of::<u16>() {
+            println!("u16 added");
             let x : u16 = u16::from_ne_bytes(packet_bytes[((i as usize)-other_samp_size)..(i as usize)].try_into().expect("FAILED"));
-            q_u.add(x);
+            for n in 0..upscale_factor {
+                q_u.add(x);
+            }
         }
         i += other_samp_size as u32;
     }
 
 }
 
+fn size_of_type<X: 'static>() -> u128 {
+    if TypeId::of::<X>() == TypeId::of::<f32>() {
+        return 4;
+    }
+    return 2;
+}
 
-fn write_output_data<T,U>(output: &mut [T], channels: u16, writer: &Arc<Mutex<Option<(usize, Receiver<Vec<u8>>, Queue<f32>, Queue<i16>, Queue<u16>)>>>)
+
+fn write_output_data<T,U>(output: &mut [T], channels: u16, upscale_factor : u32, writer: &Arc<Mutex<Option<(usize, Receiver<Vec<u8>>, Queue<f32>, Queue<i16>, Queue<u16>, SystemTime)>>>)
 where
-    T: cpal::Sample,
+    T: cpal::Sample + 'static,
     U: Clone + cpal::Sample + 'static,
 {
     if let Ok(mut guard) = writer.try_lock() {
-        if let Some((i, audiopacket_rx, que_f, que_i, que_u)) = guard.as_mut() {
+        if let Some((i, audiopacket_rx, que_f, que_i, que_u, prev_time)) = guard.as_mut() {
             if let Ok(audio_packet_bytes) = audiopacket_rx.try_recv() {
-                let my_type = 0; // these need to be passed to this func
-                let other_type = 1; 
-                add_samples_to_queue::<U>(&audio_packet_bytes, que_f, que_i, que_u);
+                add_samples_to_queue::<U>(&audio_packet_bytes, que_f, que_i, que_u, upscale_factor);
             }
             for frame in output.chunks_mut(channels.into()) {
                 for sample in frame.iter_mut() {
-                    if que_f.size() == 0 && que_i.size() == 0 && que_u.size() == 0 {
-                        break;
-                    }
-                    if que_f.size() > 0 {
+                    let current_time = SystemTime::now();
+                    // let packet_send_freq = 20;
+                    // let sample_freq = packet_send_freq / (160 / size_of_type::<U>()); 
+                    if true {
+                        *prev_time = current_time;
                         if let Ok(v) = que_f.remove() {
-                            println!("PLAYING SAMPLE");
-                            *sample = cpal::Sample::from(&v);
-                        }
-                    } else if que_i.size() > 0 {
-                        if let Ok(v) = que_i.remove() {
-                            println!("PLAYING SAMPLE");
-                            *sample = cpal::Sample::from(&v);
-                        }
-                    } else if que_u.size() > 0 {
-                        if let Ok(v) = que_u.remove() {
-                            println!("PLAYING SAMPLE");
-                            *sample = cpal::Sample::from(&v);
-                        }
-                    } else {
-                        println!("Failed to remove element from queue");
-                    }   
+                            if TypeId::of::<T>() == TypeId::of::<f32>() {
+                                let s : f32 = v.to_f32();
+                                *sample = cpal::Sample::from(&s);
+                            } else if TypeId::of::<T>() == TypeId::of::<i16>() {
+                                let s : i16 = v.to_i16(); // cpal::Sample trait
+                                *sample = cpal::Sample::from(&s);
+                            } else if TypeId::of::<T>() == TypeId::of::<u16>() {
+                                let s : u16 = v.to_u16();
+                                *sample = cpal::Sample::from(&s);
+                            }                        
+                        } else if let Ok(v) = que_i.remove() {
+                            if TypeId::of::<T>() == TypeId::of::<f32>() {
+                                let s : f32 = v.to_f32();
+                                *sample = cpal::Sample::from(&s);
+                            } else if TypeId::of::<T>() == TypeId::of::<i16>() {
+                                let s : i16 = v.to_i16(); // cpal::Sample trait
+                                *sample = cpal::Sample::from(&s);
+                            } else if TypeId::of::<T>() == TypeId::of::<u16>() {
+                                let s : u16 = v.to_u16();
+                                *sample = cpal::Sample::from(&s);
+                            } 
+                        } else if let Ok(v) = que_u.remove() {
+                            if TypeId::of::<T>() == TypeId::of::<f32>() {
+                                let s : f32 = v.to_f32();
+                                *sample = cpal::Sample::from(&s);
+                            } else if TypeId::of::<T>() == TypeId::of::<i16>() {
+                                let s : i16 = v.to_i16(); // cpal::Sample trait
+                                *sample = cpal::Sample::from(&s);
+                            } else if TypeId::of::<T>() == TypeId::of::<u16>() {
+                                let s : u16 = v.to_u16();
+                                *sample = cpal::Sample::from(&s);
+                            } 
+                        } else {
+                            println!("Failed to remove element from queue");
+                            break;
+                        }    
+                    } 
                 }
                 if que_f.size() == 0 && que_i.size() == 0 && que_u.size() == 0 {
                     break;
@@ -141,31 +143,40 @@ where
 }
 
 
-fn write_input_data<T>(input: &[T], channels: u16, writer: &Arc<Mutex<Option<(u32, Sender<Vec<u8>>, Vec<u8>)>>>)
+fn write_input_data<T>(input: &[T], channels: u16, writer: &Arc<Mutex<Option<(u32, Sender<Vec<u8>>, Vec<u8>, SystemTime, Vec<T>)>>>)
 where
     T: cpal::Sample + ConvertBytes + Display,
 {
     if let Ok(mut guard) = writer.try_lock() {
-        if let Some((seq_num, tx, buf)) = guard.as_mut() {
+        if let Some((seq_num, tx, buf, prev_time, buf2)) = guard.as_mut() {
+            let current_time = SystemTime::now();
             for frame in input.chunks(channels.into()) {
                 let x : T = frame[0].try_into().expect("FAILED");
-                let bytes : Vec<u8> = x.to_ne_bytes();
-                for b in bytes {
-                    buf.push(b);
-                }
-                if buf.len() == 160 {
+                buf2.push(x);
+                let packet_send_freq = 20;
+                if ((current_time.duration_since(*prev_time).expect("FAIL").as_millis() >= packet_send_freq) && (buf2.len() >= 160 / x.size_of())) {
+                    *prev_time = current_time;
+                    let mut i = 0;
+                    let packet_size = 160;
+                    let delta = buf2.len() / ( packet_size / x.size_of());
                     let mut res : Vec<u8> = Vec::from(seq_num.to_ne_bytes());
-                    res.extend_from_slice(&SystemTime::now().duration_since(UNIX_EPOCH).expect("System time failed").as_millis().to_ne_bytes());
-                    res.extend_from_slice(&buf);
-                    // println!("Sending bytes: {:?}", res);
+                    let timest = SystemTime::now().duration_since(UNIX_EPOCH).expect("System time failed").as_millis();
+                    res.extend_from_slice(&timest.to_ne_bytes());
+                    println!("seqnum: {}", seq_num);
+                    for n in 0..(160 / x.size_of()) {
+                        println!("{}", buf2[i]);
+                        let bytes : Vec<u8> = buf2[i].to_ne_bytes();
+                        res.extend_from_slice(&bytes);
+                        i += delta;
+                    }
                     tx.send(res.clone());
+                    buf2.clear();
                     buf.clear();
                     *seq_num += 1;
                 }
             }
         }
     }
-    // println!("end of write_input_data()");
 }
 
 
@@ -270,7 +281,7 @@ pub struct Audio {
 
 impl Audio {
 
-    pub fn new<T,U>(out_device : cpal::Device , inp_device : cpal::Device, rx : Receiver<Vec<u8>>, tx : Sender<Vec<u8>>) -> Self 
+    pub fn new<T,U>(out_device : cpal::Device , inp_device : cpal::Device, rx : Receiver<Vec<u8>>, tx : Sender<Vec<u8>>, upscale_factor : u32) -> Self 
     where 
         T: cpal::Sample + ConvertBytes + Send + Display,
         U: Clone + cpal::Sample + Send + 'static,
@@ -281,7 +292,7 @@ impl Audio {
         let q_i : Queue<i16> = Queue::new();
         let q_u : Queue<u16> = Queue::new();
         let num : usize = 0;
-        let out_state = (num, rx, q_f, q_i, q_u);
+        let out_state = (num, rx, q_f, q_i, q_u, SystemTime::now());
         let out_state = Arc::new(Mutex::new(Some(out_state)));
         let mut out_supported_configs_range = out_device.supported_output_configs().expect("error while querying configs");
         let out_config = out_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
@@ -290,49 +301,60 @@ impl Audio {
             cpal::SampleFormat::F32 => {
                 out_device.build_output_stream(
                     &out_config.into(),
-                    move |inp_data, _: &_| write_output_data::<f32,U>(inp_data, out_channels, &out_state),
+                    move |inp_data, _: &_| write_output_data::<f32,U>(inp_data, out_channels, upscale_factor, &out_state),
                     err_fn,
                 )
             },
             cpal::SampleFormat::I16 => {
                 out_device.build_output_stream(
                     &out_config.into(),
-                    move |inp_data, _: &_| write_output_data::<i16,U>(inp_data, out_channels, &out_state),
+                    move |inp_data, _: &_| write_output_data::<i16,U>(inp_data, out_channels, upscale_factor, &out_state),
                     err_fn,
                 )
             },
             cpal::SampleFormat::U16 => {
                 out_device.build_output_stream(
                     &out_config.into(),
-                    move |inp_data, _: &_| write_output_data::<u16,U>(inp_data, out_channels, &out_state),
+                    move |inp_data, _: &_| write_output_data::<u16,U>(inp_data, out_channels, upscale_factor, &out_state),
                     err_fn,
                 )
             },
         };
 
-        // let inp_device = host.default_input_device().expect("no default input device");
         println!("Input device: {:?}", inp_device.name());
         let mut inp_supported_configs_range = inp_device.supported_input_configs().expect("error while querying configs");
         let inp_config = inp_supported_configs_range.next().expect("no supported config?!").with_max_sample_rate();
         let buffer : Vec<u8> = Vec::new();
-        let inp_state = Arc::new(Mutex::new(Some((0, tx, buffer))));
+        let time : SystemTime = SystemTime::now();
         let inp_channels = inp_config.channels();
         let inp_s = match inp_config.sample_format() {
-            cpal::SampleFormat::F32 => inp_device.build_input_stream(
-                &inp_config.into(),
-                move |inp_data, _: &_| write_input_data::<f32>(inp_data, inp_channels, &inp_state),
-                err_fn,
-            ),
-            cpal::SampleFormat::I16 => inp_device.build_input_stream(
-                &inp_config.into(),
-                move |inp_data, _: &_| write_input_data::<i16>(inp_data, inp_channels, &inp_state),
-                err_fn,
-            ),
-            cpal::SampleFormat::U16 => inp_device.build_input_stream(
-                &inp_config.into(),
-                move |inp_data, _: &_| write_input_data::<u16>(inp_data, inp_channels, &inp_state),
-                err_fn,
-            ),
+            cpal::SampleFormat::F32 => {
+                let buffer2 : Vec<f32> = Vec::new();
+                let inp_state = Arc::new(Mutex::new(Some((0, tx, buffer, time, buffer2))));
+                inp_device.build_input_stream(
+                    &inp_config.into(),
+                    move |inp_data, _: &_| write_input_data::<f32>(inp_data, inp_channels, &inp_state),
+                    err_fn,
+                )
+            },
+            cpal::SampleFormat::I16 => {
+                let buffer2 : Vec<i16> = Vec::new();
+                let inp_state = Arc::new(Mutex::new(Some((0, tx, buffer, time, buffer2))));
+                inp_device.build_input_stream(
+                    &inp_config.into(),
+                    move |inp_data, _: &_| write_input_data::<i16>(inp_data, inp_channels, &inp_state),
+                    err_fn,
+                )
+            },
+            cpal::SampleFormat::U16 => {
+                let buffer2 : Vec<u16> = Vec::new();
+                let inp_state = Arc::new(Mutex::new(Some((0, tx, buffer, time, buffer2))));
+                inp_device.build_input_stream(
+                    &inp_config.into(),
+                    move |inp_data, _: &_| write_input_data::<u16>(inp_data, inp_channels, &inp_state),
+                    err_fn,
+                )
+            },
         };
 
         Self {

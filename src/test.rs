@@ -44,7 +44,6 @@ fn float_to_binary()
         }
         z[i] = s;
     }
-    
     println!("x");
     for n in 0..4 {
         println!("{}", x[n]);
@@ -60,15 +59,47 @@ fn float_to_binary()
 
 fn handle_client(stream: TcpStream) {
     println!("Connected!");
+    println!("other address: {}", stream.peer_addr().expect("fail"));
 }
 
-
-fn main() 
-{
-    let listener = TcpListener::bind("192.168.0.91:1071");
-
-    // accept connections and process them serially
+fn recv_tcp() {
+    let listener = TcpListener::bind("192.168.68.109:1071");
+    println!("binded successfully");    
     for stream in listener.expect("FAIL1").incoming() {
         handle_client(stream.expect("Failed connection"));
     }
+}
+
+fn send_tcp() {
+    // let stream = TcpStream::connect("192.168.68.114:1071").expect("failed");
+    let stream = TcpStream::connect("192.168.68.114:1071").expect("failed");
+    println!("connected!");
+
+    // if let Ok(stream) = TcpStream::connect("192.168.68.114:1071") {
+    //     println!("connected!");
+    // } else {
+    //     println!("Failed");
+    // }
+}
+
+fn recv_udp() {
+    let socket = UdpSocket::bind("192.168.68.109:1071").expect("couldn't bind");
+    let mut buf = [0;10];
+    match socket.recv(&mut buf) {
+        Ok(received) => println!("received {received} bytes {:?}", &buf[..received]),
+        Err(e) => println!("recv function failed: {e:?}"),
+    }
+}
+
+fn send_udp() {
+    let socket = UdpSocket::bind("192.168.68.109:1071").expect("couldn't bind");
+    socket.send_to(&[0;10], "192.168.68.114:1071").expect("Coudn't send data");
+}
+
+
+
+fn main()
+{
+    // send_tcp(); 
+    send_udp();
 }
