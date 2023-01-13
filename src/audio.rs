@@ -1,7 +1,7 @@
 extern crate queues;
 
 
-use crate::byte_trates::{ConvertBytes};
+use crate::byte_traits::{ConvertBytes};
 use queues::*;
 use std::mem;
 use std::sync::Arc;
@@ -53,7 +53,7 @@ where
             }
             // println!("{x}");
         } else if TypeId::of::<U>() == TypeId::of::<i16>() {
-            println!("i16 added");
+            // println!("i16 added");
             let x : i16 = i16::from_ne_bytes(packet_bytes[((i as usize)-other_samp_size)..(i as usize)].try_into().expect("FAILED"));
             for n in 0..upscale_factor {
                 q_i.add(x);
@@ -154,7 +154,7 @@ where
                 let x : T = frame[0].try_into().expect("FAILED");
                 buf2.push(x);
                 let packet_send_freq = 20;
-                if ((current_time.duration_since(*prev_time).expect("FAIL").as_millis() >= packet_send_freq) && (buf2.len() >= 160 / x.size_of())) {
+                if (current_time.duration_since(*prev_time).expect("FAIL").as_millis() >= packet_send_freq) && (buf2.len() >= 160 / x.size_of()) {
                     *prev_time = current_time;
                     let mut i = 0;
                     let packet_size = 160;

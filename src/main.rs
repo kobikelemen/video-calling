@@ -1,11 +1,15 @@
 mod client;
 mod audio;
-mod byte_trates;
+mod byte_traits;
 
 use std::sync::mpsc;
 use cpal::traits::{HostTrait, DeviceTrait};
-use byte_trates::ConvertBytes;
+use byte_traits::ConvertBytes;
 use std::fmt::Display;
+use std::net::{TcpListener, TcpStream, IpAddr, Ipv4Addr};
+use client::{ServerConnection, CallConnectionUDP, wait_for_call, start_call};
+
+
 
 fn run_app<MySampleType, OtherSampleType>(out_device : cpal::Device, inp_device : cpal::Device, upscale_factor : u32) 
 where
@@ -17,15 +21,18 @@ where
     let mut aud : audio::Audio = audio::Audio::new::<MySampleType,OtherSampleType>(out_device, inp_device, speaker_packet_rx, mic_packet_tx, upscale_factor);
     let server_connection = client::ServerConnection::new();
     let friend_name : String = "jeff".to_string();
-    let port = 1069; // recv from port
-    let call_connection = client::CallConnection::new(friend_name, server_connection, port);
+    let my_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,109));
+    let my_tcp_port = 1069; // recv from port
+    let (other_ip, other_tcp_port) = server_connection.get_friend_addr(friend_name);
+    let mut my_udp_port = 1001;
+    let call_connection = wait_for_call(other_ip, other_tcp_port, my_ip, my_udp_port, server_connection);
+    /* Udp voice call */
     loop {
         match call_connection.recv_data::<OtherSampleType>() {
             Some(audiopacket) => {
                 speaker_packet_tx.send(audiopacket);
             },
             None => {
-
             },
         }
         if let Ok(audio_packet_bytes) = mic_packet_rx.try_recv() {
