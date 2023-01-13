@@ -1,10 +1,10 @@
 mod client;
 mod audio;
-mod byte_traits;
+mod byte_trates;
 
 use std::sync::mpsc;
 use cpal::traits::{HostTrait, DeviceTrait};
-use byte_traits::ConvertBytes;
+use byte_trates::ConvertBytes;
 use std::fmt::Display;
 
 fn run_app<MySampleType, OtherSampleType>(out_device : cpal::Device, inp_device : cpal::Device, upscale_factor : u32) 
@@ -39,7 +39,7 @@ where
 
 fn main() 
 {    
-    type OtherSampleType = f32; // get from tcp network connection before starting call
+    type OtherSampleType = i16; // get from tcp network connection before starting call
     let host = cpal::default_host();
     let out_device = host.default_output_device().expect("no output device");
     let inp_device = host.default_input_device().expect("no default input device");

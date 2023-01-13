@@ -1,7 +1,7 @@
 extern crate queues;
 
 
-use crate::byte_traits::{ConvertBytes};
+use crate::byte_trates::{ConvertBytes};
 use queues::*;
 use std::mem;
 use std::sync::Arc;
@@ -162,9 +162,9 @@ where
                     let mut res : Vec<u8> = Vec::from(seq_num.to_ne_bytes());
                     let timest = SystemTime::now().duration_since(UNIX_EPOCH).expect("System time failed").as_millis();
                     res.extend_from_slice(&timest.to_ne_bytes());
-                    println!("seqnum: {}", seq_num);
+                    // println!("seqnum: {}", seq_num);
                     for n in 0..(160 / x.size_of()) {
-                        println!("{}", buf2[i]);
+                        // println!("{}", buf2[i]);
                         let bytes : Vec<u8> = buf2[i].to_ne_bytes();
                         res.extend_from_slice(&bytes);
                         i += delta;

@@ -1,7 +1,7 @@
 
 
 use crate::audio::{AudioPacket};
-use crate::byte_traits::{ConvertBytes};
+use crate::byte_trates::{ConvertBytes};
 use std::net::{UdpSocket, IpAddr, Ipv4Addr, TcpStream};
 // use byteorder::LittleEndian;
 
