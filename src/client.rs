@@ -90,49 +90,34 @@ impl CallConnectionUDP {
 }
 
 
-pub struct ConnectionTCP() {
-    // my_ip : IpAddr,
-    // my_recv_port : u16,
-    // other_ip : IpAddr,
-    // other_recv_port : u16, // what port THIS COMP sends to
-    send_stream : TcpStream,
-    recv_stream : TcpStream,
+pub struct ConnectionTCP {
+    stream : TcpStream,
 }
 
 impl ConnectionTCP {
-    pub fn wait_for_connection(my_ip : IpAddr, other_ip : IpAddr, my_recv_port : u16, other_recv_port : u16) -> Self {
-        // binds to socket and waits for connection
-        // when connection comes, returns content of request
-        // "192.168.68.109:1071"
+    pub fn wait_for_connection(my_ip : IpAddr, my_recv_port : u16) -> Self {
         let listener = TcpListener::bind((my_ip, my_recv_port)).expect("F");
-        let recv_stream = listener.incoming().next().expect("F").expect("f");
-        // let peer_addr : std::net::SocketAddr = stream.peer_addr().expect("F");
-        let send_stream = TcpStream::connect((other_ip, other_recv_port)).expect("F");
+        let stream = listener.incoming().next().expect("F").expect("f");
         Self {
-            send_stream,
-            recv_stream,
+            stream,
         }
     }
 
-    pub fn connect_to(my_ip : IpAddr, other_ip : IpAddr, my_recv_port : u16, other_port : u16) -> Self {
-        let mut send_stream = TcpStream::connect((other_ip, other_port)).expect("F");
-        // let local_addr : std::net::SocketAddr = stream.local_addr().expect("F");
-        let listener = TcpListener::bind((my_ip, my_recv_port)).expect("F");
-        let recv_stream = listener.incoming().next().expect("F").expect("f");
+    pub fn connect_to(other_ip : IpAddr, other_port : u16) -> Self {
+        let mut stream = TcpStream::connect((other_ip, other_port)).expect("F");
         Self {
-            send_stream,
-            recv_stream,
+            stream,
         }
     }
 
-    pub fn send(&self, data : String) {
-        self.send_stream.write(data.as_bytes());
+    pub fn send(&mut self, data : String) {
+        self.stream.write(data.as_bytes());
     }
 
-    pub fn recv(&self) -> String {
-        let mut data = String::new();
-        self.recv_stream.read_to_string(&mut data);
-        data
+    pub fn recv(&mut self) -> String {
+        let mut buf = [0;512];
+        self.stream.read(&mut buf).expect("f");        
+        String::from_utf8(Vec::from(buf)).expect("F")
     }
 }
 

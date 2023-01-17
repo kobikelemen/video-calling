@@ -131,7 +131,7 @@ fn server_ConnectionTCP() {
     let other_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,114));
     let my_recv_port = 1070;
     let other_recv_port = 1070;
-    let connection = client::ConnectionTCP::wait_for_connection(my_ip, other_ip, my_recv_port, other_recv_port);
+    let mut connection = client::ConnectionTCP::wait_for_connection(my_ip, my_recv_port);
     let data = connection.recv();
     println!("recieved: {data}");
     connection.send(String::from("hello bish"));
@@ -143,7 +143,7 @@ fn client_ConnectionTCP() {
     let other_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,109));
     let my_recv_port = 1070;
     let other_recv_port = 1070;
-    let connection = client::ConnectionTCP::connect_to(my_ip, other_ip, my_recv_port, other_recv_port);
+    let mut connection = client::ConnectionTCP::connect_to(other_ip, other_recv_port);
     connection.send(String::from("yoooo"));
     println!("data sent");
     let data = connection.recv();
@@ -153,5 +153,6 @@ fn client_ConnectionTCP() {
 
 fn main()
 {
-    server();
+    server_ConnectionTCP();
+    loop{}
 }
