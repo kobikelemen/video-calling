@@ -7,7 +7,7 @@ use cpal::traits::{HostTrait, DeviceTrait};
 use byte_traits::ConvertBytes;
 use std::fmt::Display;
 use std::net::{TcpListener, TcpStream, IpAddr, Ipv4Addr};
-use client::{ServerConnection, CallConnectionUDP, wait_for_call, start_call};
+use client::{ConnectionTCP, ServerConnection, CallConnectionUDP, wait_for_call, start_call};
 
 
 
@@ -25,9 +25,11 @@ where
     let (other_ip, other_tcp_port) = server_connection.get_friend_addr(friend_name);
     let my_udp_port = 1001;
     let my_sample_type : u8 = 1;
-    let call_connection = start_call(my_sample_type, other_ip, other_tcp_port, my_ip, my_udp_port, server_connection);
+    let mut tcp_connection = ConnectionTCP::connect_to(other_ip, other_tcp_port);
+    let call_connection = start_call(tcp_connection, my_sample_type, other_ip, my_ip, my_udp_port, server_connection);
     let mut aud : audio::Audio = audio::Audio::new::<MySampleType,OtherSampleType>(out_device, inp_device, speaker_packet_rx, mic_packet_tx, upscale_factor);
     /* Udp voice call */
+    println!("audio call started");
     loop {
         match call_connection.recv_data::<OtherSampleType>() {
             Some(audiopacket) => {
