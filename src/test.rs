@@ -1,4 +1,8 @@
+mod client;
+mod byte_traits;
+
 use std::net::{UdpSocket, IpAddr, Ipv4Addr, TcpListener, TcpStream};
+use std::io::{Write,Read};
 
 fn u32_to_binary(mut i : u32) -> [u8; 32] {
     let mut res : [u8; 32] = [0; 32];
@@ -57,13 +61,16 @@ fn float_to_binary()
 }
 
 
-fn handle_client(stream: TcpStream) {
+fn handle_client(mut stream: TcpStream) {
     println!("Connected!");
     println!("other address: {}", stream.peer_addr().expect("fail"));
+    let mut s = String::new();
+    stream.read_to_string(&mut s);
+    println!("recved: {s}");
 }
 
 fn recv_tcp() {
-    let listener = TcpListener::bind("192.168.68.109:1071");
+    let mut listener = TcpListener::bind("192.168.68.109:1071");
     println!("binded successfully");    
     for stream in listener.expect("FAIL1").incoming() {
         handle_client(stream.expect("Failed connection"));
@@ -72,14 +79,11 @@ fn recv_tcp() {
 
 fn send_tcp() {
     // let stream = TcpStream::connect("192.168.68.114:1071").expect("failed");
-    let stream = TcpStream::connect("192.168.68.114:1071").expect("failed");
+    let mut stream = TcpStream::connect("192.168.68.114:1071").expect("failed");
     println!("connected!");
-
-    // if let Ok(stream) = TcpStream::connect("192.168.68.114:1071") {
-    //     println!("connected!");
-    // } else {
-    //     println!("Failed");
-    // }
+    let s = String::from("hello bish");
+    stream.write(s.as_bytes());
+    println!("finished writing");
 }
 
 fn recv_udp() {
@@ -97,9 +101,57 @@ fn send_udp() {
 }
 
 
+fn test_req() {
+    let bytes = client::write_call_req(69,420);
+    println!("{:?}", bytes);
+    let (typ, port) = client::parse_call_req(bytes);
+    println!("{typ} {port}");
+}
+
+fn h(mut stream : TcpStream) {
+    println!("incomong connection from: {}", stream.peer_addr().expect("F"));
+    let mut buf = [0; 512];
+    loop {
+        let bytes_read = stream.read(&mut buf).expect("f");
+        println!("receieved");
+        stream.write(&buf[..bytes_read]).expect("f");
+        println!("sent");
+    }
+}
+fn server() {
+    let listener = TcpListener::bind("192.168.68.109:1071").expect("F");
+    for stream in listener.incoming() {
+        h(stream.expect("F"));
+    }
+}
+
+
+fn server_ConnectionTCP() {
+    let my_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,109));
+    let other_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,114));
+    let my_recv_port = 1070;
+    let other_recv_port = 1070;
+    let connection = client::ConnectionTCP::wait_for_connection(my_ip, other_ip, my_recv_port, other_recv_port);
+    let data = connection.recv();
+    println!("recieved: {data}");
+    connection.send(String::from("hello bish"));
+    println!("data sent");
+}
+
+fn client_ConnectionTCP() {
+    let my_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,114));
+    let other_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,109));
+    let my_recv_port = 1070;
+    let other_recv_port = 1070;
+    let connection = client::ConnectionTCP::connect_to(my_ip, other_ip, my_recv_port, other_recv_port);
+    connection.send(String::from("yoooo"));
+    println!("data sent");
+    let data = connection.recv();
+    println!("recieved: {data}");
+}
+
 
 fn main()
 {
-    // send_tcp(); 
-    send_udp();
+    server();
 }

@@ -90,8 +90,56 @@ impl CallConnectionUDP {
 }
 
 
-fn parse_call_req(req : Vec<u8>) -> (u8, u16) {
-    let req = String::from_utf8(req).expect("F");
+pub struct ConnectionTCP() {
+    // my_ip : IpAddr,
+    // my_recv_port : u16,
+    // other_ip : IpAddr,
+    // other_recv_port : u16, // what port THIS COMP sends to
+    send_stream : TcpStream,
+    recv_stream : TcpStream,
+}
+
+impl ConnectionTCP {
+    pub fn wait_for_connection(my_ip : IpAddr, other_ip : IpAddr, my_recv_port : u16, other_recv_port : u16) -> Self {
+        // binds to socket and waits for connection
+        // when connection comes, returns content of request
+        // "192.168.68.109:1071"
+        let listener = TcpListener::bind((my_ip, my_recv_port)).expect("F");
+        let recv_stream = listener.incoming().next().expect("F").expect("f");
+        // let peer_addr : std::net::SocketAddr = stream.peer_addr().expect("F");
+        let send_stream = TcpStream::connect((other_ip, other_recv_port)).expect("F");
+        Self {
+            send_stream,
+            recv_stream,
+        }
+    }
+
+    pub fn connect_to(my_ip : IpAddr, other_ip : IpAddr, my_recv_port : u16, other_port : u16) -> Self {
+        let mut send_stream = TcpStream::connect((other_ip, other_port)).expect("F");
+        // let local_addr : std::net::SocketAddr = stream.local_addr().expect("F");
+        let listener = TcpListener::bind((my_ip, my_recv_port)).expect("F");
+        let recv_stream = listener.incoming().next().expect("F").expect("f");
+        Self {
+            send_stream,
+            recv_stream,
+        }
+    }
+
+    pub fn send(&self, data : String) {
+        self.send_stream.write(data.as_bytes());
+    }
+
+    pub fn recv(&self) -> String {
+        let mut data = String::new();
+        self.recv_stream.read_to_string(&mut data);
+        data
+    }
+}
+
+
+
+pub fn parse_call_req(req : String) -> (u8, u16) {
+    println!("req: {req}");
     let i = req.find(':').expect("F");
     let j = req.find(' ').expect("F");
     let end = String::from(&req[j..]);
@@ -102,40 +150,55 @@ fn parse_call_req(req : Vec<u8>) -> (u8, u16) {
 }
 
 
-fn write_call_req(my_sample_type : u8, my_udp_port : u16) -> Vec<u8> {
+pub fn write_call_req(my_sample_type : u8, my_udp_port : u16) -> String {
     let mut req = String::from("type:");
     req.push_str(&my_sample_type.to_string());
     req.push_str(" port:");
     req.push_str(&my_udp_port.to_string());
-    Vec::from(req)
+    req
 }
 
 
 pub fn start_call(my_sample_type : u8, other_ip : IpAddr, other_tcp_port : u16, my_ip : IpAddr, my_udp_port : u16, server_conn : ServerConnection) -> CallConnectionUDP {
     println!("Press any key to start call");
     std::io::stdin().read_line(&mut String::new());
-    let mut stream = TcpStream::connect((other_ip, other_tcp_port)).expect("failed to open tcp stream to other computer");
-    stream.write(&write_call_req(my_sample_type, my_udp_port).as_slice()).expect("failed to send tcp req");
-    let mut buf : Vec<u8> = Vec::new();
-    stream.read(&mut buf).expect("failed to read rcp req");
-    let (other_type, other_udp_port) = parse_call_req(buf);
+    let mut stream = TcpStream::connect("192.168.68.114:1068").expect("failed to open tcp stream to other computer");
+    println!("tcp connected!");
+    let req = write_call_req(my_sample_type, my_udp_port);
+    stream.write(req.as_bytes());
+    println!("sent req {req}");
+    stream.shutdown(std::net::Shutdown::Both).expect("F");
+    let listenerTCP = TcpListener::bind("192.168.68.109:1101").expect("failed to bind to tcp");
+    let mut stream = listenerTCP.incoming().next().expect("f").expect("F");
+    let mut resp = String::new();
+    stream.read_to_string(&mut resp).expect("failed to read rcp req");
+    println!("response: {resp}");
+    // loop {}
+    let (other_type, other_udp_port) = parse_call_req(resp);
+    // let other_type = 1;
+    // let other_udp_port = 1;
     let call_connection = CallConnectionUDP::new(my_ip, my_udp_port, other_ip, other_udp_port, server_conn);
     return call_connection
 }   
 
 
-pub fn wait_for_call(other_ip : IpAddr, other_tcp_port : u16, my_ip : IpAddr, mut my_udp_port : u16, server_conn : ServerConnection) -> CallConnectionUDP {
+pub fn wait_for_call(other_ip : IpAddr, other_tcp_port : u16, my_ip : IpAddr, mut my_tcp_port : u16, my_udp_port : u16, server_conn : ServerConnection) -> CallConnectionUDP {
+    println!("Waiting for incoming call");
     let mut stream : TcpStream;
-    loop {
-        if let Ok(listenerTCP) = TcpListener::bind((my_ip, my_udp_port)) {
-            stream = listenerTCP.incoming().next().expect("f").expect("F");       
-            break;
-        } 
-        my_udp_port += 1;
-    }
-    let mut buf : Vec<u8> = Vec::new();
-    stream.read(buf.as_mut_slice()).expect("f");
-    let (other_sample_type, other_udp_port) = parse_call_req(buf);
+    let listenerTCP = TcpListener::bind((my_ip, my_tcp_port)).expect("failed to bind to tcp port");
+    stream = listenerTCP.incoming().next().expect("f").expect("F");
+    stream.set_nonblocking(false).expect("f");
+
+    // loop {
+    //     if let Ok(listenerTCP) = TcpListener::bind((my_ip, my_tcp_port)) {
+    //         stream = listenerTCP.incoming().next().expect("f").expect("F");       
+    //         break;
+    //     } 
+    //     my_tcp_port += 1;
+    // }
+    let mut req = String::new();
+    stream.read_to_string(&mut req).expect("f");
+    let (other_sample_type, other_udp_port) = parse_call_req(req);
     let my_sample_type : u8 = 0;
     let call_connection = CallConnectionUDP::new(my_ip, my_udp_port, other_ip, other_udp_port, server_conn);
     call_connection

@@ -18,14 +18,15 @@ where
 {
     let (speaker_packet_tx, speaker_packet_rx) = mpsc::channel();
     let (mic_packet_tx, mic_packet_rx) = mpsc::channel();
-    let mut aud : audio::Audio = audio::Audio::new::<MySampleType,OtherSampleType>(out_device, inp_device, speaker_packet_rx, mic_packet_tx, upscale_factor);
     let server_connection = client::ServerConnection::new();
     let friend_name : String = "jeff".to_string();
     let my_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,109));
-    let my_tcp_port = 1069; // recv from port
+    let mut my_tcp_port = 1069; // recv from port
     let (other_ip, other_tcp_port) = server_connection.get_friend_addr(friend_name);
-    let mut my_udp_port = 1001;
-    let call_connection = wait_for_call(other_ip, other_tcp_port, my_ip, my_udp_port, server_connection);
+    let my_udp_port = 1001;
+    let my_sample_type : u8 = 1;
+    let call_connection = start_call(my_sample_type, other_ip, other_tcp_port, my_ip, my_udp_port, server_connection);
+    let mut aud : audio::Audio = audio::Audio::new::<MySampleType,OtherSampleType>(out_device, inp_device, speaker_packet_rx, mic_packet_tx, upscale_factor);
     /* Udp voice call */
     loop {
         match call_connection.recv_data::<OtherSampleType>() {
