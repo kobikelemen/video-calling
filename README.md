@@ -9,7 +9,7 @@ I have achieved the audio part of this (having people on two computers talk to e
 
 Sound travels as a wave, and can be represented as a function time vs amplitude for a given point in space. A computer samples this function at fixed intervals in time to get a digital representation of the sound as a function of time, as shown below.
 
-![](sounds-sampling.png)
+![](sounds-samling.png)
 
 I used the cpal rust package which takes a constant stream of these samples from your computers microphone, and stores them in either integer or floating point representations. 
 
