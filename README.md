@@ -15,14 +15,16 @@ I used the cpal rust package which takes a constant stream of these samples from
 
 The next challenge is sending this audio stream to the person you're making a call to. To achieve this, I made a custom packet for storing and sending these audio samples:
 
-`pub struct AudioPacket<S>
+```
+pub struct AudioPacket<S>
 {
-    pub maxbytes : usize,
+    pub maxbytes : usize, 
     pub timestamp : u128,
     pub sequencenumber : u32,
     pub samples : Vec<S>,
-    pub bytes : Vec<u8>,
-} `
+    pub bytes : Vec<u8>
+}
+```
 
 It has various header information such as the number of bytes in the packet, the time it was sent, its sequence number relative to other packets, and the actual array of audio samples.
 
