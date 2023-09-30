@@ -18,7 +18,6 @@ use cpal::Sample;
 
 // type ClipHandle = Arc<Mutex<Option<(u32, Sender<AudioPacket>, Vec<u8>)>>>;
 
-
 fn type_size<X>() -> usize
 where 
     X: 'static,
@@ -41,8 +40,6 @@ where
     const seqsize : usize = 4;
     let timest : u128 = u128::from_ne_bytes(packet_bytes[seqsize..seqsize+timesize].try_into().expect("Failed converting to time format in new_from_bytes()"));
     let seqnum : u32 = u32::from_ne_bytes(packet_bytes[0..seqsize].try_into().expect("Failed converting to u32 in new_from_bytes()"));
-    // println!("timestamp: {}", timest);
-    // println!("seqnum: {}", seqnum);
     let mut i = (timesize + seqsize) as u32;
     let other_samp_size : usize = type_size::<U>();
     while i < packet_bytes.len().try_into().expect("F") {
@@ -51,15 +48,12 @@ where
             for n in 0..upscale_factor {
                 q_f.add(x);
             }
-            // println!("{x}");
         } else if TypeId::of::<U>() == TypeId::of::<i16>() {
-            // println!("i16 added");
             let x : i16 = i16::from_ne_bytes(packet_bytes[((i as usize)-other_samp_size)..(i as usize)].try_into().expect("FAILED"));
             for n in 0..upscale_factor {
                 q_i.add(x);
             }
         } else if TypeId::of::<U>() == TypeId::of::<u16>() {
-            println!("u16 added");
             let x : u16 = u16::from_ne_bytes(packet_bytes[((i as usize)-other_samp_size)..(i as usize)].try_into().expect("FAILED"));
             for n in 0..upscale_factor {
                 q_u.add(x);
@@ -91,8 +85,6 @@ where
             for frame in output.chunks_mut(channels.into()) {
                 for sample in frame.iter_mut() {
                     let current_time = SystemTime::now();
-                    // let packet_send_freq = 20;
-                    // let sample_freq = packet_send_freq / (160 / size_of_type::<U>()); 
                     if true {
                         *prev_time = current_time;
                         if let Ok(v) = que_f.remove() {
@@ -162,9 +154,7 @@ where
                     let mut res : Vec<u8> = Vec::from(seq_num.to_ne_bytes());
                     let timest = SystemTime::now().duration_since(UNIX_EPOCH).expect("System time failed").as_millis();
                     res.extend_from_slice(&timest.to_ne_bytes());
-                    // println!("seqnum: {}", seq_num);
                     for n in 0..(160 / x.size_of()) {
-                        // println!("{}", buf2[i]);
                         let bytes : Vec<u8> = buf2[i].to_ne_bytes();
                         res.extend_from_slice(&bytes);
                         i += delta;
@@ -235,7 +225,7 @@ impl<S: ConvertBytes> AudioPacket<S>
         }
     }
 
-    /*
+    
     pub fn new_from_bytes(byte : Vec<u8>) -> Self {
         const timesize : usize = 16;
         const seqsize : usize = 4;
@@ -244,7 +234,6 @@ impl<S: ConvertBytes> AudioPacket<S>
         let mut samps : Vec<S> = Vec::new();
         let mut i = timesize + seqsize;
         while i < byte.len() {
-            // let s : S = from_bytes::<S>(byte[(i-mem::size_of::<S>())..i].to_vec());
             let s : S = S::from_ne_bytes(byte[(i-mem::size_of::<S>())..i].try_into().expect("Failed converting to sample format in new_from_bytes()"));
             samps.push(s);
             i += mem::size_of::<S>();
@@ -257,7 +246,7 @@ impl<S: ConvertBytes> AudioPacket<S>
             bytes : byte,
         }
     }
-    */
+    
 
     pub fn get_bytes(&self) -> &Vec<u8> {
         return &self.bytes;
@@ -287,7 +276,6 @@ impl Audio {
         U: Clone + cpal::Sample + Send + 'static,
     {
         // get sample type, U, that will be received from other user over the network
-        // type StateHandle = Arc<Mutex<Option<(usize, Receiver<AudioPacket>, Queue<U>)>>>;
         let q_f : Queue<f32> = Queue::new();
         let q_i : Queue<i16> = Queue::new();
         let q_u : Queue<u16> = Queue::new();

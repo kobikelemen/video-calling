@@ -4,6 +4,7 @@ mod byte_traits;
 use std::net::{UdpSocket, IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::io::{Write,Read};
 
+
 fn u32_to_binary(mut i : u32) -> [u8; 32] {
     let mut res : [u8; 32] = [0; 32];
     let mut x : u32 = 31;
@@ -19,7 +20,6 @@ fn u32_to_binary(mut i : u32) -> [u8; 32] {
     }
     return res;
 }
-
 
 
 fn float_to_binary()
@@ -56,8 +56,6 @@ fn float_to_binary()
     for n in 0..4 {
         println!("{}", z[n]);
     }
-    // println!("EQUAL!");
-    
 }
 
 
@@ -69,6 +67,7 @@ fn handle_client(mut stream: TcpStream) {
     println!("recved: {s}");
 }
 
+
 fn recv_tcp() {
     let mut listener = TcpListener::bind("192.168.68.109:1071");
     println!("binded successfully");    
@@ -76,6 +75,7 @@ fn recv_tcp() {
         handle_client(stream.expect("Failed connection"));
     }
 }
+
 
 fn send_tcp() {
     // let stream = TcpStream::connect("192.168.68.114:1071").expect("failed");
@@ -86,6 +86,7 @@ fn send_tcp() {
     println!("finished writing");
 }
 
+
 fn recv_udp() {
     let socket = UdpSocket::bind("192.168.68.109:1071").expect("couldn't bind");
     let mut buf = [0;10];
@@ -94,6 +95,7 @@ fn recv_udp() {
         Err(e) => println!("recv function failed: {e:?}"),
     }
 }
+
 
 fn send_udp() {
     let socket = UdpSocket::bind("192.168.68.109:1071").expect("couldn't bind");
@@ -108,6 +110,7 @@ fn test_req() {
     println!("{typ} {port}");
 }
 
+
 fn h(mut stream : TcpStream) {
     println!("incomong connection from: {}", stream.peer_addr().expect("F"));
     let mut buf = [0; 512];
@@ -118,6 +121,8 @@ fn h(mut stream : TcpStream) {
         println!("sent");
     }
 }
+
+
 fn server() {
     let listener = TcpListener::bind("192.168.68.109:1071").expect("F");
     for stream in listener.incoming() {
@@ -137,6 +142,7 @@ fn server_ConnectionTCP() {
     connection.send(String::from("hello bish"));
     println!("data sent");
 }
+
 
 fn client_ConnectionTCP() {
     let my_ip = IpAddr::V4(Ipv4Addr::new(192,168,68,114));

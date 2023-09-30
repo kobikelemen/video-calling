@@ -6,26 +6,22 @@ use std::str::FromStr;
 use std::io::{Write, Read};
 
 pub struct ServerConnection {
-    // server_ip : IpAddr,
-    // server_stream : TcpStream,
+    server_ip : IpAddr,
+    server_stream : TcpStream,
 }
 
 impl ServerConnection {
     pub fn new() -> Self {
-        
-        // let server_connect_port = 20001;
-        // server_ip_ = IPAddr::new(127, 0, 0, 1);
-        // if let Ok(server_str) = TcpStream::connect((server_ip_, server_connect_port)); {
-        //     println!("Connected to server...");
-        // } else {
-        //     println!("Connection to server FAILED");
-        // }
-        // ServerConnection {
-        //     server_ip : server_ip_,
-        //     server_strean : server_str,
-        // }
+        let server_connect_port = 20001;
+        server_ip_ = IPAddr::new(127, 0, 0, 1);
+        if let Ok(server_str) = TcpStream::connect((server_ip_, server_connect_port)); {
+            println!("Connected to server...");
+        } else {
+            println!("Connection to server FAILED");
+        }
         ServerConnection {
-
+            server_ip : server_ip_,
+            server_strean : server_str,
         }
     }
 
